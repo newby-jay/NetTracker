@@ -1,0 +1,7 @@
+numpy
+scipy
+pandas
+Hungarian
+apache_beam
+tensorflow
+numba
