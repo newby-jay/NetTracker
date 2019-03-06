@@ -16,7 +16,6 @@ segmentVid = segmentVidForwardBackward
 import pandas as pd
 import tensorflow as tf
 from itertools import product
-from Hungarian import hungarian_solve
 
 import apache_beam as beam
 from apache_beam.transforms import PTransform
@@ -32,7 +31,6 @@ class NeuralNet(beam.DoFn):
         self.backwardRun = backwardRun
     def process(self, KVelement, modelPath):
         key, element = KVelement
-        hungarian_solve(rand(5, 5))
         stats = mean(element['stats'], axis=1)
         stats[:, 1] = sqrt(stats[:, 1] - stats[:, 0]**2)
         vid = element['videoData']
