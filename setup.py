@@ -74,7 +74,6 @@ class CustomCommands(setuptools.Command):
     pass
 
   def RunCustomCommand(self, command_list):
-    print 'Running command: %s' % command_list
     p = subprocess.Popen(
         command_list,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -95,8 +94,14 @@ class CustomCommands(setuptools.Command):
 # Note that the Python Dataflow containers come with numpy already installed
 # so this dependency will not trigger anything to be installed unless a version
 # restriction is specified.
-REQUIRED_PACKAGES = ['numpy', 'scipy', 'pandas', 'Hungarian',
-                     'apache_beam', 'tensorflow', 'numba']
+REQUIRED_PACKAGES = [
+    'numpy',
+    'scipy',
+    'pandas',
+    'Hungarian',
+    'apache_beam',
+    'tensorflow==1.9.0',
+    'numba==0.38.1']
 
 setuptools.setup(
     name='NetTracker',

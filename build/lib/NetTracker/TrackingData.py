@@ -6,7 +6,7 @@ from scipy.optimize import minimize_scalar
 from itertools import product, permutations, repeat, izip, imap
 # from multiprocessing import Pool
 # from contextlib import closing
-from _hungarian import hungarian
+from Hungarian import hungarian_solve
 from scipy.io import savemat, loadmat
 from numba import jit
 
@@ -68,7 +68,7 @@ def linkFrame(args):
         return float32(c)
     c = make_c()
     assert sum(isnan(c)) == 0
-    now = array(hungarian(c))
+    now = array(hungarian_solve(c))
     back = arange(now.size)
     linkinds = (back<Nb)*(now<Nn)
     MLlinks = array([back[linkinds], now[linkinds]]).T
@@ -96,18 +96,18 @@ def connectedComponents(args):
     openPoints.pop()
     localizations = [(0, 0, 0, 0.)]
     localizations.pop()
-    while (NsegedStart<N):
+    while NsegedStart < N:
         ## get starting point to begin new segment
-        while ((NsegedStart<N) and (segments[NsegedStart]>0)):
+        while NsegedStart < N and segments[NsegedStart] > 0:
             NsegedStart += 1
             ## add first point to the queue
-        if (NsegedStart<N):
+        if NsegedStart < N:
             openPoints.append(NsegedStart)
         ## continue segmenting points at the front of the queue,
         ## while adding unopened nearest neighbor points to the end of the queue
         pointSet = [0]
         pointSet.pop()
-        while (len(openPoints)>0):
+        while len(openPoints) > 0:
             point = openPoints.pop()
             pointSet.append(point)
             segments[point] = currentSegNumber
@@ -126,14 +126,20 @@ def connectedComponents(args):
         psum = 0.
         xave, yave, zave = 0., 0., 0.
         pmax = 0.
+        zvals = [0]
+        zvals.pop()
         for point in pointSet:
             psum += data[3, point]
             xave += data[0, point]*data[3, point]
             yave += data[1, point]*data[3, point]
             zave += data[2, point]*data[3, point]
+            zvals.append(int(data[2, point]))
             if data[3, point] > pmax:
                 pmax = data[3, point]
-        if psum>0:
+        ## check if segment is only one z-slice
+        #Nslices = unique(zvals).size
+        #sliceCheck = Nslices > 1 or Nz == 1
+        if psum > 0:
             localizations.append((xave/psum, yave/psum, zave/psum, pmax))
         ## once queue is empty, start a new segment
         currentSegNumber += 1
@@ -143,11 +149,12 @@ def estimateRadii(args):
     locs, volume = args
     volume = float64(volume)
     if locs.size == 0:
-        return array([]), array([]), array([])
+        return array([]), array([]), array([]), array([])
     Nlocs, _ = locs.shape
     radii = zeros(Nlocs)
     Ibg = zeros(Nlocs)
     Ipsf = zeros(Nlocs)
+    SNR = zeros(Nlocs)
     rmax = 20.
     s = arange(-rmax, rmax+1)
     near = array([xn for xn in product(s, s)
@@ -156,9 +163,11 @@ def estimateRadii(args):
     def estimate(xave, frame):
         xinds = around(xave).astype(int)
         patchInds = array([ij for ij in xinds + near
-                           if ij[1] > 0 and ij[1] < N1-1
-                           and ij[0] > 0 and ij[0] < N2-1
-                           and frame[ij[1], ij[0]] > 0])
+                           if ij[1] >= 0 and ij[1] <= N1-1
+                           and ij[0] >= 0 and ij[0] <= N2-1
+                           and frame[ij[1], ij[0]] >= 0])
+        if patchInds.ndim != 2:
+            return 0., 0., 0., 0.
         I = frame[patchInds[:, 1], patchInds[:, 0]]
         EI = mean(I)
         d2 = sum((xave - patchInds)**2, axis=1)
@@ -180,15 +189,22 @@ def estimateRadii(args):
         # B = max(10.0, (mean(I*zeta) - EI*Ezeta)/var(zeta))
         B = (mean(I*zeta) - EI*Ezeta)/var(zeta)
         A = EI - B*Ezeta
-        # print(A, B, res.x)
-        return res.x, A, A + B
+        # (A + B*zeta - I)^2
+        localSTD = std(A + B*zeta - I)
+        if localSTD > 0:
+            snr = absolute(B)/localSTD
+        elif B == 0:
+            snr = 0
+        else:
+            snr = inf
+        return res.x, A, A + B, snr
     ####################
     for n in arange(Nlocs):
         xave = locs[n]
         zn = int(around(xave[2]))
         frame = volume[..., zn]
-        radii[n], Ibg[n], Ipsf[n] = estimate(xave[:2], frame)
-    return radii, Ibg, Ipsf
+        radii[n], Ibg[n], Ipsf[n], SNR[n] = estimate(xave[:2], frame)
+    return radii, Ibg, Ipsf, SNR
 
 class TrackingData:
     """Process, store, and serialize particle tracking data."""
@@ -259,8 +275,9 @@ class TrackingData:
             array([times, x, y, z, p,
                 zeros_like(p),
                 zeros_like(p),
+                zeros_like(p),
                 zeros_like(p)]).T,
-            columns=['t', 'x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak']
+            columns=['t', 'x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak', 'SNR']
             )
         return DF
     def _estimateAllRadii(self, vid, nprocs, ds):
@@ -271,10 +288,11 @@ class TrackingData:
         for t in arange(self.Nt):
             volume = float32(vid.getVolume(t)[::ds, ::ds, :])
             locs = self.particleSetGrouped[t][:, :3]
-            radii, Ibg, Ipeak = estimateRadii((locs, volume))
+            radii, Ibg, Ipeak, SNR = estimateRadii((locs, volume))
             self.particleSetGrouped[t][:, 4] = radii
             self.particleSetGrouped[t][:, 5] = Ibg
             self.particleSetGrouped[t][:, 6] = Ipeak
+            self.particleSetGrouped[t][:, 7] = SNR
     def _linkParticles(self, D, nprocs):
         """find most likely links between pixels in adjacent frames.
            Uses linear assignment via the Hungarian algorithm.
@@ -319,7 +337,8 @@ class TrackingData:
             return self.particleSetGrouped[t][n, 3]
         def getI(t, n):
             return (self.particleSetGrouped[t][n, 5],
-                self.particleSetGrouped[t][n, 6])
+                self.particleSetGrouped[t][n, 6],
+                self.particleSetGrouped[t][n, 7])
         def loopFn(k, pn, b_in):
             def loopflag(k, b_in):
                 if k<self.Nt-1:
@@ -344,11 +363,12 @@ class TrackingData:
                     xnow, ynow, znow = pSet(k, n)
                     radnow = getRad(k, n)
                     pnow = getProb(k, n)
-                    IbgNow, IpeakNow = getI(k, n)
+                    IbgNow, IpeakNow, SNRnow = getI(k, n)
                     dataOut.append({'particle': pn, 'frame': k,
                                     'x': xnow, 'y': ynow, 'z': znow,
                                     'p': pnow, 'r': radnow,
-                                    'Ibg':IbgNow, 'Ipeak':IpeakNow})
+                                    'Ibg':IbgNow, 'Ipeak':IpeakNow,
+                                    'SNR':SNRnow})
                     collectedParticles[k].append(n)
                     k += 1
                     b_in = n
@@ -361,11 +381,12 @@ class TrackingData:
                     xnow, ynow, znow = pSet(k+1, n)
                     radnow = getRad(k+1, n)
                     pnow = getProb(k+1, n)
-                    IbgNow, IpeakNow = getI(k+1, n)
+                    IbgNow, IpeakNow, SNRnow = getI(k+1, n)
                     dataOut.append({'particle': pn, 'frame': k+1,
                                     'x': xnow, 'y': ynow, 'z': znow,
                                     'p': pnow, 'r': radnow,
-                                    'Ibg':IbgNow, 'Ipeak':IpeakNow})
+                                    'Ibg':IbgNow, 'Ipeak':IpeakNow,
+                                    'SNR':SNRnow})
                     collectedParticles[k+1].append(n)
                     k += 2
                     b_in = n
@@ -379,8 +400,8 @@ class TrackingData:
                 xnow, ynow, znow = pSet(k, n)
                 radback, radnow = getRad(k-1, b), getRad(k, n)
                 pback, pnow = getProb(k-1, b), getProb(k, n)
-                IbgBack, IpeakBack = getI(k-1, b)
-                IbgNow, IpeakNow = getI(k, n)
+                IbgBack, IpeakBack, SNRback = getI(k-1, b)
+                IbgNow, IpeakNow, SNRnow = getI(k, n)
                 dataOut.append({'particle': pn,
                                 'frame': k-1,
                                 'x': xback,
@@ -389,7 +410,8 @@ class TrackingData:
                                 'p': pback,
                                 'r': radback,
                                 'Ibg': IbgBack,
-                                'Ipeak': IpeakBack})
+                                'Ipeak': IpeakBack,
+                                'SNR': SNRback})
                 dataOut.append({'particle': pn,
                                 'frame': k,
                                 'x': xnow,
@@ -398,12 +420,14 @@ class TrackingData:
                                 'p': pnow,
                                 'r': radnow,
                                 'Ibg': IbgNow,
-                                'Ipeak': IpeakNow})
+                                'Ipeak': IpeakNow,
+                                'SNR': SNRnow})
                 collectedParticles[k-1].append(b)
                 collectedParticles[k].append(n)
                 loopFn(k+1, pn, n)
                 pn += 1
-        names = ['particle', 'frame', 'x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak']
+        names = ['particle', 'frame', 'x', 'y', 'z', 'p',
+            'r', 'Ibg', 'Ipeak', 'SNR']
         dataOut = pd.DataFrame(dataOut, columns=names) \
             .sort_values(['particle', 'frame'])
         return dataOut
@@ -447,6 +471,7 @@ class TrackingData:
                            'r': array(g.r),
                            'Ibg': array(g.Ibg),
                            'Ipeak': array(g.Ipeak),
+                           'SNR': array(g['SNR']),
                            'N': N, 'Deff (xy)': D2, 'Deff (xyz)': D3}
         return dictData
     def detectionsToDict(self):
@@ -461,6 +486,7 @@ class TrackingData:
                     'r': array(self.particleSet.r),
                     'Ibg': array(self.particleSet.Ibg),
                     'Ipeak': array(self.particleSet.Ipeak),
+                    'SNR': array(self.particleSet['SNR']),
                     'N': self.particleSet.x.size}
         return dictData
     def particleColor(self, p, cmap='jet'):
@@ -500,11 +526,13 @@ class TrackingData:
         Nfiltered = sum(inds==False)
         self.filteredParticles = self.particleSet[inds].copy()
         PSnew = array(
-            self.particleSet[inds][['t', 'x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak']])
+            self.particleSet[inds][['t', 'x', 'y', 'z', 'p',
+                'r', 'Ibg', 'Ipeak', 'SNR']])
         self.particleSet = self.setDetections(
             pd.DataFrame(
                 PSnew,
-                columns=['t', 'x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak']
+                columns=['t', 'x', 'y', 'z', 'p',
+                    'r', 'Ibg', 'Ipeak', 'SNR']
                 )
             )
         print(Nfiltered, 'particle localizations filtered')
@@ -521,16 +549,18 @@ class TrackingData:
     def estimateRadii(self, vidFile, ds=1, nprocs=2):
         print('estimating PSF radii')
         self._estimateAllRadii(vidFile, nprocs, ds)
-        r, Ibg, Ipeak = [], [], []
+        r, Ibg, Ipeak, SNR = [], [], [], []
         for k, v in self.particleSetGrouped.iteritems():
             r.extend(v[:, 4])
             Ibg.extend(v[:, 5])
             Ipeak.extend(v[:, 6])
+            SNR.extend(v[:, 7])
         self.setDetections(
             self.particleSet
                 .assign(r=array(r))
                 .assign(Ibg=array(Ibg))
                 .assign(Ipeak=array(Ipeak))
+                .assign(SNR=array(SNR))
             )
         return self
     def linkParticles(self, D=10., nprocs=1, skipLink=True):
@@ -546,9 +576,10 @@ class TrackingData:
         for t in arange(self.Nt):
             try:
                 g = groups.get_group(t)
-                PSG[t] = array(g[['x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak']])
+                PSG[t] = array(g[['x', 'y', 'z', 'p',
+                    'r', 'Ibg', 'Ipeak', 'SNR']])
             except KeyError:
-                PSG[t] = array([[], [], [], [], [], [], []]).T
+                PSG[t] = array([[], [], [], [], [], [], [], []]).T
         return PSG
     def setDetections(self, detectionData):
         self.particleSet = detectionData

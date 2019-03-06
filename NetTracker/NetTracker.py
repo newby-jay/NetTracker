@@ -16,6 +16,7 @@ segmentVid = segmentVidForwardBackward
 import pandas as pd
 import tensorflow as tf
 from itertools import product
+from Hungarian import hungarian_solve
 
 import apache_beam as beam
 from apache_beam.transforms import PTransform
@@ -31,6 +32,7 @@ class NeuralNet(beam.DoFn):
         self.backwardRun = backwardRun
     def process(self, KVelement, modelPath):
         key, element = KVelement
+        hungarian_solve(rand(5, 5))
         stats = mean(element['stats'], axis=1)
         stats[:, 1] = sqrt(stats[:, 1] - stats[:, 0]**2)
         vid = element['videoData']
@@ -63,21 +65,25 @@ class Segment(beam.DoFn):
         Nt, Nx, Ny, Nz = trackData.shape
         for t in arange(Nt):
             volume = vid[t]
+            assert trackData.particleSetGrouped[t].ndim == 2
             locs = trackData.particleSetGrouped[t][:, :3]
-            radii, Ibg, Ipeak = estimateRadii((locs, volume))
+            radii, Ibg, Ipeak, SNR = estimateRadii((locs, volume))
             trackData.particleSetGrouped[int(t)][:, 4] = radii
             trackData.particleSetGrouped[int(t)][:, 5] = Ibg
             trackData.particleSetGrouped[int(t)][:, 6] = Ipeak
-        r, Ibg, Ipeak = [], [], []
+            trackData.particleSetGrouped[int(t)][:, 7] = SNR
+        r, Ibg, Ipeak, SNR = [], [], [], []
         for k, v in trackData.particleSetGrouped.iteritems():
             r.extend(v[:, 4])
             Ibg.extend(v[:, 5])
             Ipeak.extend(v[:, 6])
+            SNR.extend(v[:, 7])
         trackData.setDetections(
             trackData.particleSet
                 .assign(r=array(r))
                 .assign(Ibg=array(Ibg))
                 .assign(Ipeak=array(Ipeak))
+                .assign(SNR=array(SNR))
             )
         return trackData
     def process(self, KVelement):
@@ -106,24 +112,54 @@ class Linker(beam.DoFn):
     def process(self, KVelement):
         key, element = KVelement
         zscale = element['metadata']['dz']/element['metadata']['dxy']
+        Nt, Ny, Nx, Nz = element['metadata']['vidShape']
+        if Nz > 1:
+            l0 = element['pointSet']
+            localizations = l0[l0.z % 1 != 0]
+        else:
+            localizations = element['pointSet']
         trackData = TrackingData(shape=element['metadata']['vidShape'],
                                  zscale=zscale)
-        trackData.setDetections(element['pointSet'])
+        trackData.setDetections(localizations)
         trackData.linkParticles(D=self.sigma, skipLink=self.skipLink)
         if self.filterLength>2:
             trackData.filterPathsByLength(self.filterLength)
-        output = {'trackData': trackData.Data,
+        output = {'trackData': trackData.Data.to_json(),
                   'particleSet': trackData.detectionsToDict(),
                   'tracks': trackData.tracksToDict(),
                   'metadata': element['metadata'],
                  }
         yield (key, output)
 
+# class Serialize(beam.DoFn):
+#     """Format localization data for output."""
+#
+#     def __init__(self):
+#         pass
+#     def process(self, KVelement):
+#         key, element = KVelement
+#         zscale = element['metadata']['dz']/element['metadata']['dxy']
+#         Nt, Ny, Nx, Nz = element['metadata']['vidShape']
+#         if Nz > 1:
+#             l0 = element['pointSet']
+#             localizations = l0[l0.z % 1 != 0]
+#         else:
+#             localizations = element['pointSet']
+#         trackData = TrackingData(shape=element['metadata']['vidShape'],
+#                                  zscale=zscale)
+#         trackData.setDetections(localizations)
+#         output = {'trackData': '',
+#                   'particleSet': trackData.detectionsToDict(),
+#                   'tracks': '',
+#                   'metadata': element['metadata'],
+#                  }
+#         yield (key, output)
+
 class TracksToCSV(beam.DoFn):
     """Write tracks to CSV."""
 
     def __init__(self):
-        self.columns = ['x', 'y', 'z', 't', 'r', 'Ibg', 'Ipeak',
+        self.columns = ['x', 'y', 'z', 't', 'r', 'Ibg', 'Ipeak', 'SNR',
                         'Deff (xy)', 'Deff (xyz)', 'particle']
     def _getPath(self, path):
         spath = []
