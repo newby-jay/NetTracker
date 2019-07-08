@@ -99,7 +99,7 @@ REQUIRED_PACKAGES = [
     'scipy',
     'pandas',
     'Hungarian',
-    'apache_beam',
+    #'apache_beam',
     'tensorflow==1.9.0',
     'numba==0.38.1']
 

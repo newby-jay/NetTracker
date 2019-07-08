@@ -3,12 +3,18 @@ from __future__ import print_function
 from numpy import *
 import pandas as pd
 from scipy.optimize import minimize_scalar
-from itertools import product, permutations, repeat, izip, imap
+from itertools import product, permutations, repeat
 # from multiprocessing import Pool
 # from contextlib import closing
 from Hungarian import hungarian_solve
 from scipy.io import savemat, loadmat
 from numba import jit
+import sys
+if sys.version_info.major == 3:
+    izip = zip
+    imap = map
+else:
+    from itertools import izip, imap
 
 # import logging
 # import threading
@@ -61,7 +67,9 @@ def linkFrame(args):
         birth = diag(-log(1.-pnow))
         death[death==0] = inf
         birth[birth==0] = inf
-        R = min(min(pback.min(), pnow.min()), logL.min())*ones((Nn, Nb))
+        #min1 = min(pback.min(), pnow.min()) # x < -log(1-x), x\in(0, 1)
+        #R = min(min1, logL.min())*ones((Nn, Nb))
+        R = zeros((Nn, Nb))
         R[logL.T > cutOff] = inf
         c = r_[c_[logL, death],
                c_[birth,    R]]
@@ -212,8 +220,9 @@ class TrackingData:
     def __init__(self, filename='', shape=(), zscale=1):
         self.linkFn = linkFrame
         self._localizer = self._LocateParticlesConnectedComponents
-        self.shape = shape
+        self.shape = (None, None, None, None)
         self.zscale = zscale
+        self.Nt, self.Ny, self.Nx, self.Nz = None, None, None, None
         if len(filename)>0:
             try:
                 self.Data = pd.read_csv(filename+' (tracks).csv', index_col=0)
@@ -431,12 +440,56 @@ class TrackingData:
         dataOut = pd.DataFrame(dataOut, columns=names) \
             .sort_values(['particle', 'frame'])
         return dataOut
+    def segmentParticles(self, pixelProb, vidFile=None,
+                         thresh=0.5, nprocs=2, ds=1):
+        print('identifying probable particles')
+        locData = self._localizer(pixelProb, thresh, nprocs)
+        if ds>1:
+            locData.x *= ds
+            locData.y *= ds
+        self.setDetections(locData)
+        return self
+    def estimateRadii(self, vidFile, ds=1, nprocs=2):
+        print('estimating PSF radii')
+        self._estimateAllRadii(vidFile, nprocs, ds)
+        r, Ibg, Ipeak, SNR = [], [], [], []
+        for k, v in self.particleSetGrouped.iteritems():
+            r.extend(v[:, 4])
+            Ibg.extend(v[:, 5])
+            Ipeak.extend(v[:, 6])
+            SNR.extend(v[:, 7])
+        self.setDetections(
+            self.particleSet
+                .assign(r=array(r))
+                .assign(Ibg=array(Ibg))
+                .assign(Ipeak=array(Ipeak))
+                .assign(SNR=array(SNR))
+            )
+        return self
+    def linkParticles(self, D=10., nprocs=1, skipLink=False):
+        print('linking particles')
+        P = self._linkParticles(D, nprocs)
+        print('collecting trajectories')
+        self.Data = self._collectTrajectories(P, skipLink)
+        self.trajectoryStats()
+        return self
+    def _makePSgrouped(self):
+        PSG = {}
+        groups = self.particleSet.groupby('t')
+        for t in arange(self.Nt):
+            try:
+                g = groups.get_group(t)
+                PSG[t] = array(g[['x', 'y', 'z', 'p',
+                    'r', 'Ibg', 'Ipeak', 'SNR']])
+            except KeyError:
+                PSG[t] = array([[], [], [], [], [], [], [], []]).T
+        return PSG
     def trajectoryStats(self, output=True):
         """Print information about particle tracks."""
         td = self.Data.groupby('particle')
         self.Nparticles = td.particle.ngroups
         self.lengths = array(td.size())
-        if output:
+        if output and self.Nparticles > 0:
             print(self.Nparticles, 'trajectories')
             print('mean trajectory length:', mean(self.lengths),
                   ', std:', std(self.lengths))
@@ -502,7 +555,7 @@ class TrackingData:
         "Filter all trajectories that have less than n increments"
         g = self.Data.groupby('particle')
         NparticlesOld = self.Nparticles
-        Data = g.filter(lambda x: x.frame.max()-x.frame.min() >= n-1)
+        Data = g.filter(lambda x: x.frame.size >= n)
         ## renumber index
         # d = Data.pivot('particle', 'frame').stack()
         # pn = array(d.axes[0].levels[0])
@@ -537,54 +590,23 @@ class TrackingData:
             )
         print(Nfiltered, 'particle localizations filtered')
         return self
-    def segmentParticles(self, pixelProb, vidFile=None,
-                         thresh=0.5, nprocs=2, ds=1):
-        print('identifying probable particles')
-        locData = self._localizer(pixelProb, thresh, nprocs)
-        if ds>1:
-            locData.x *= ds
-            locData.y *= ds
-        self.setDetections(locData)
-        return self
-    def estimateRadii(self, vidFile, ds=1, nprocs=2):
-        print('estimating PSF radii')
-        self._estimateAllRadii(vidFile, nprocs, ds)
-        r, Ibg, Ipeak, SNR = [], [], [], []
-        for k, v in self.particleSetGrouped.iteritems():
-            r.extend(v[:, 4])
-            Ibg.extend(v[:, 5])
-            Ipeak.extend(v[:, 6])
-            SNR.extend(v[:, 7])
-        self.setDetections(
-            self.particleSet
-                .assign(r=array(r))
-                .assign(Ibg=array(Ibg))
-                .assign(Ipeak=array(Ipeak))
-                .assign(SNR=array(SNR))
-            )
-        return self
-    def linkParticles(self, D=10., nprocs=1, skipLink=True):
-        print('linking particles')
-        P = self._linkParticles(D, nprocs)
-        print('collecting trajectories')
-        self.Data = self._collectTrajectories(P, skipLink)
-        self.trajectoryStats()
-        return self
-    def _makePSgrouped(self):
-        PSG = {}
-        groups = self.particleSet.groupby('t')
-        for t in arange(self.Nt):
-            try:
-                g = groups.get_group(t)
-                PSG[t] = array(g[['x', 'y', 'z', 'p',
-                    'r', 'Ibg', 'Ipeak', 'SNR']])
-            except KeyError:
-                PSG[t] = array([[], [], [], [], [], [], [], []]).T
-        return PSG
     def setDetections(self, detectionData):
+        """Data setter for particle localizations (pre linking)."""
         self.particleSet = detectionData
         self.particleSetGrouped = self._makePSgrouped()
+    def _getShape(self):
+        if self.Nt == None:
+            self.Nt = self.Data.frame.max()
+        if self.Nx == None:
+            self.Nx = self.Data.x.max()
+        if self.Ny == None:
+            self.Ny = self.Data.y.max()
+        if self.Nz == None:
+            self.Nz = self.Data.z.max()
+        self.shape = (self.Nt, self.Ny, self.Nx, self.Nz)
     def setData(self, data):
+        """Data setter for particle tracks (post linking)."""
         self.Data = data.sort_values(['particle', 'frame'], axis=0)
         self.trajectoryStats(output=False)
+        self._getShape()
         return self

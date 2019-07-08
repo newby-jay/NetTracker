@@ -11,12 +11,12 @@ import zipfile
 
 from NetTracker.TrackingData import TrackingData, estimateRadii
 from NetTracker.NNsegmentation import segmentVidForwardBackward
+from NetTracker.TrackLinking import linkTracks
 segmentVid = segmentVidForwardBackward
 
 import pandas as pd
 import tensorflow as tf
 from itertools import product
-from Hungarian import hungarian_solve
 
 import apache_beam as beam
 from apache_beam.transforms import PTransform
@@ -32,7 +32,6 @@ class NeuralNet(beam.DoFn):
         self.backwardRun = backwardRun
     def process(self, KVelement, modelPath):
         key, element = KVelement
-        hungarian_solve(rand(5, 5))
         stats = mean(element['stats'], axis=1)
         stats[:, 1] = sqrt(stats[:, 1] - stats[:, 0]**2)
         vid = element['videoData']
@@ -102,13 +101,13 @@ class Linker(beam.DoFn):
     far a link can be made (increasing this value will mean particles can make
     larger displacements between frames). Input `filterLength=1` (defaults to
     no fitering) filters all particle tracks with fewer than 'filterLength'
-    observations. Input 'skipLink=True' set to True will link particles over
+    observations. Input 'trackLink=True' set to True will link particles over
     one missing if no link is made to the next frame (this will make tracks
     longer)."""
 
-    def __init__(self, sigma=5., filterLength=1, skipLink=True):
+    def __init__(self, sigma=5., filterLength=5, trackLink=False):
         self.sigma = sigma; self.filterLength = filterLength;
-        self.skipLink = skipLink
+        self.trackLink = trackLink
     def process(self, KVelement):
         key, element = KVelement
         zscale = element['metadata']['dz']/element['metadata']['dxy']
@@ -121,11 +120,24 @@ class Linker(beam.DoFn):
         trackData = TrackingData(shape=element['metadata']['vidShape'],
                                  zscale=zscale)
         trackData.setDetections(localizations)
-        trackData.linkParticles(D=self.sigma, skipLink=self.skipLink)
+        trackData.linkParticles(D=self.sigma)
+        detectionsOut = trackData.detectionsToDict()
+        if self.trackLink:
+            #trackData.filterPathsByLength(3)
+            trackData.trajectoryStats(output=False)
+        if trackData.Nparticles > 1000:
+            self.trackLink = False
+        if self.trackLink:
+            trackData = linkTracks(trackData, tLinkScale=3)
         if self.filterLength>2:
             trackData.filterPathsByLength(self.filterLength)
-        output = {'trackData': trackData.Data.to_json(),
-                  'particleSet': trackData.detectionsToDict(),
+        if self.trackLink:
+            trackData = linkTracks(
+                trackData,
+                tLinkScale=15,
+                birth=1.5, death=1.5)
+        output = {'trackData': trackData.Data,
+                  'particleSet': detectionsOut,
                   'tracks': trackData.tracksToDict(),
                   'metadata': element['metadata'],
                  }
