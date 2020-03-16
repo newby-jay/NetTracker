@@ -1,13 +1,11 @@
-from __future__ import division
-from __future__ import print_function
-from __future__ import absolute_import
+# from __future__ import division
+# from __future__ import print_function
+# from __future__ import absolute_import
 from numpy import *
 from numpy.random import rand
 import os
 import sys
 import time
-import cStringIO
-import zipfile
 
 from NetTracker.TrackingData import TrackingData, estimateRadii
 from NetTracker.NNsegmentation import segmentVidForwardBackward
@@ -72,7 +70,7 @@ class Segment(beam.DoFn):
             trackData.particleSetGrouped[int(t)][:, 6] = Ipeak
             trackData.particleSetGrouped[int(t)][:, 7] = SNR
         r, Ibg, Ipeak, SNR = [], [], [], []
-        for k, v in trackData.particleSetGrouped.iteritems():
+        for k, v in trackData.particleSetGrouped.items():
             r.extend(v[:, 4])
             Ibg.extend(v[:, 5])
             Ipeak.extend(v[:, 6])
@@ -190,7 +188,7 @@ class TracksToCSV(beam.DoFn):
         key, element = KVelement
         fileName = self._getPath(key)
         data = zeros((len(self.columns), 0), 'float64')
-        Uparticles = sort(array([int(v) for v in element.keys()], 'int'))
+        Uparticles = sort(array([int(v) for v in element], 'int'))
         assert all(Uparticles >= 0)
         for pn in Uparticles:
             particle = element[pn]

@@ -1,5 +1,10 @@
-from __future__ import division
-from __future__ import print_function
+##############################
+##############################
+#### UNUSED ##################
+##############################
+##############################
+# from __future__ import division
+# from __future__ import print_function
 from numpy import *
 import pandas as pd
 from scipy.optimize import minimize_scalar
@@ -118,7 +123,7 @@ class EstimateRadii:
         print('estimating PSF radii')
         self._estimateAllRadii(vidFile, nprocs, ds)
         r, Ibg, Ipeak, SNR = [], [], [], []
-        for k, v in self.particleSetGrouped.iteritems():
+        for k, v in self.particleSetGrouped.items():
             r.extend(v[:, 4])
             Ibg.extend(v[:, 5])
             Ipeak.extend(v[:, 6])

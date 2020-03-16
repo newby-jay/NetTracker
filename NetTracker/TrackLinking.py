@@ -1,13 +1,8 @@
-from __future__ import division
-from __future__ import print_function
 from numpy import *
 import pandas as pd
 from scipy.optimize import minimize_scalar
 from itertools import product, permutations, repeat
-# from multiprocessing import Pool
-# from contextlib import closing
 import TrackingData as TD
-from Hungarian import hungarian_solve
 from lap import lapmod
 import sys
 if sys.version_info.major == 3:

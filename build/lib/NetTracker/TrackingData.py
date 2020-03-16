@@ -1,46 +1,16 @@
-from __future__ import division
-from __future__ import print_function
 from numpy import *
 import pandas as pd
 from scipy.optimize import minimize_scalar
 from itertools import product, permutations, repeat
-# from multiprocessing import Pool
-# from contextlib import closing
-from Hungarian import hungarian_solve
-from lap import lapmod
+from lap import lapmod, lapjv
 from scipy.io import savemat, loadmat
-from numba import jit
+# from numba import jit
 import sys
 if sys.version_info.major == 3:
     izip = zip
     imap = map
 else:
     from itertools import izip, imap
-
-# import logging
-# import threading
-# import weakref
-# from multiprocessing.pool import ThreadPool
-# def run_using_threadpool(fn_to_execute, inputs, pool_size):
-#     """Runs the given function on given inputs using a thread pool.
-#
-#     Args:
-#     fn_to_execute: Function to execute
-#     inputs: Inputs on which given function will be executed in parallel.
-#     pool_size: Size of thread pool.
-#     Returns:
-#     Results retrieved after executing the given function on given inputs.
-#     """
-#
-#     if not hasattr(threading.current_thread(), '_children'):
-#         threading.current_thread()._children = weakref.WeakKeyDictionary()
-#     pool = ThreadPool(min(pool_size, len(inputs)))
-#     try:
-#         old_level = logging.getLogger().level
-#         return pool.map(fn_to_execute, inputs)
-#     finally:
-#         pool.terminate()
-#         logging.getLogger().setLevel(old_level)
 
 def linkFrame(args):
     P, params = args
@@ -77,7 +47,8 @@ def linkFrame(args):
         return float32(c)
     c = make_c()
     assert sum(isnan(c)) == 0
-    now = array(hungarian_solve(c))
+    # now = array(hungarian_solve(c))
+    _, now = array(lapjv(c))
     back = arange(now.size)
     linkinds = (back<Nb)*(now<Nn)
     MLlinks = array([back[linkinds], now[linkinds]]).T
@@ -454,7 +425,7 @@ class TrackingData:
         print('estimating PSF radii')
         self._estimateAllRadii(vidFile, nprocs, ds)
         r, Ibg, Ipeak, SNR = [], [], [], []
-        for k, v in self.particleSetGrouped.iteritems():
+        for k, v in self.particleSetGrouped.items():
             r.extend(v[:, 4])
             Ibg.extend(v[:, 5])
             Ipeak.extend(v[:, 6])
