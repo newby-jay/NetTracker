@@ -8,6 +8,7 @@ from itertools import product, permutations, repeat
 # from contextlib import closing
 import TrackingData as TD
 from Hungarian import hungarian_solve
+from lap import lapmod
 import sys
 if sys.version_info.major == 3:
     izip = zip
@@ -36,9 +37,11 @@ class SparseArrayFloat32:
         I = array(I, 'int64')
         J = array(J, 'int64')
         A = float32(A)
+        assert all(I.shape == J.shape)
+        assert all(J.shape == A.shape)
         if I.size == 0:
             return self
-        self._validateData(I, J, A)
+        # self._validateData(I, J, A)
         if self.size == 0:
             self.I, self.J, self.A = I, J, A
         else:
@@ -48,6 +51,20 @@ class SparseArrayFloat32:
         self.size = self.I.size
         self._validateData(self.I, self.J, self.A)
         return self
+    def convert(self):
+        inds = lexsort((self.I, self.J))
+        kk = int32(self.I[inds])
+        jj = int32(self.J[inds])
+        vals = float32(self.A[inds])
+        first = int32(r_[0, arange(self.size)[r_[0, diff(jj)] != 0], vals.size])
+        assert kk.max() == first.size - 2
+        assert kk.min() == 0
+        assert jj.max() == first.size - 2
+        assert jj.min() == 0
+        assert all(first >= 0)
+        assert all(first <= vals.size)
+        assert len(set(first)) == first.size
+        return float64(vals), kk, first
 
 def prepareTrackData(trackData):
     tracks = trackData.groupby('particle')
@@ -91,11 +108,11 @@ def makeCostMatrix(Data, tLinkScale, distMax, birth, death):
     C = SparseArrayFloat32()
     Nt = ends[:, 0].max()
     maxTimeSkip = int(0.15*Nt)
+    I, J, L = [], [], []
     for e in arange(Ntracks):
         te = ends[e, 0]
         xe = ends[e, 1:]
         D = max(1e-2, 2.*mobilities[e])
-        I, J, L = [], [], []
         for s in arange(Ntracks):
             if s == e:
                 continue
@@ -114,9 +131,9 @@ def makeCostMatrix(Data, tLinkScale, distMax, birth, death):
             I.append(e)
             J.append(s)
             L.append(l)
-        I, J, L = array(I), array(J), array(L)
-        C.addData(I, J, L)
-        C.addData(Ntracks + J, Ntracks + I, 0*L)
+    I, J, L = array(I), array(J), array(L)
+    C.addData(I, J, L)
+    C.addData(Ntracks + J, Ntracks + I, 0*L)
     ## deaths
     I = arange(Ntracks)
     J = Ntracks + I
@@ -141,7 +158,7 @@ def collectGroups(E, S):
             ind = r[s == E][0]
             s = S[ind]
             if s in collectedParticles:
-                return
+                continue
             group.append(s)
             collectedParticles.append(s)
         Groups.append(group)
@@ -165,10 +182,12 @@ def linkTracks(trackData, tLinkScale=30, distMax=50, birth=2., death=2.):
         return trackData
     Data = prepareTrackData(trackData.Data)
     Cs = makeCostMatrix(Data, tLinkScale, distMax, birth, death)
-    C = empty((2*Ntracks, 2*Ntracks), float32)
-    C[:] = inf
-    C[Cs.I, Cs.J] = Cs.A
-    start = array(hungarian_solve(C))
+    # C = empty((2*Ntracks, 2*Ntracks), float32)
+    # C[:] = inf
+    # C[Cs.I, Cs.J] = Cs.A
+    # start = array(hungarian_solve(C))
+    vals, kk, offsets = Cs.convert()
+    _, start = array(lapmod(2*Ntracks, vals, offsets, kk, return_cost=False))
     end = arange(start.size)
     linkinds = (start < Ntracks) & (end < Ntracks)
     S, E = start[linkinds], end[linkinds]

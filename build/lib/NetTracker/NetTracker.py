@@ -122,20 +122,21 @@ class Linker(beam.DoFn):
         trackData.setDetections(localizations)
         trackData.linkParticles(D=self.sigma)
         detectionsOut = trackData.detectionsToDict()
+        trackData.trajectoryStats(output=False)
         if self.trackLink:
-            #trackData.filterPathsByLength(3)
-            trackData.trajectoryStats(output=False)
-        if trackData.Nparticles > 1000:
-            self.trackLink = False
-        if self.trackLink:
-            trackData = linkTracks(trackData, tLinkScale=3)
+            trackData = linkTracks(
+                trackData,
+                tLinkScale=3,
+                birth=2.,
+                death=2.)
         if self.filterLength>2:
             trackData.filterPathsByLength(self.filterLength)
         if self.trackLink:
             trackData = linkTracks(
                 trackData,
                 tLinkScale=15,
-                birth=1.5, death=1.5)
+                birth=2.,
+                death=2.)
         output = {'trackData': trackData.Data,
                   'particleSet': detectionsOut,
                   'tracks': trackData.tracksToDict(),

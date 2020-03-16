@@ -7,6 +7,7 @@ from itertools import product, permutations, repeat
 # from multiprocessing import Pool
 # from contextlib import closing
 from Hungarian import hungarian_solve
+from lap import lapmod
 from scipy.io import savemat, loadmat
 from numba import jit
 import sys
@@ -82,7 +83,7 @@ def linkFrame(args):
     MLlinks = array([back[linkinds], now[linkinds]]).T
     return MLlinks
 
-@jit(nopython=True)
+# @jit(nopython=True)
 def connectedComponents(args):
     ## input is a 4xN array (x, y, z, p)
     data, shape = args
