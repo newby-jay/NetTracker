@@ -4,7 +4,6 @@ from numpy import mean, std, r_, c_, nonzero, float64
 import os
 import tensorflow as tf
 import pandas as pd
-import NetTracker
 from scipy import interpolate
 from numpy.random import rand
 

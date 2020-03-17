@@ -7,9 +7,9 @@ import os
 import sys
 import time
 
-from NetTracker.TrackingData import TrackingData, estimateRadii
-from NetTracker.NNsegmentation import segmentVidForwardBackward
-from NetTracker.TrackLinking import linkTracks
+from .TrackingData import TrackingData, estimateRadii
+from .NNsegmentation import segmentVidForwardBackward
+from .TrackLinking import linkTracks
 segmentVid = segmentVidForwardBackward
 
 import pandas as pd

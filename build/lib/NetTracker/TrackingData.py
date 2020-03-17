@@ -48,7 +48,7 @@ def linkFrame(args):
     c = make_c()
     assert sum(isnan(c)) == 0
     # now = array(hungarian_solve(c))
-    _, now = array(lapjv(c))
+    _, now = array(lapjv(c, return_cost=False))
     back = arange(now.size)
     linkinds = (back<Nb)*(now<Nn)
     MLlinks = array([back[linkinds], now[linkinds]]).T
@@ -287,9 +287,12 @@ class TrackingData:
                     imap(lambda t: getProbs(t), arange(self.Nt-1)),
                     imap(lambda t: getLocs(t), arange(1, self.Nt)),
                     imap(lambda t: getLocs(t), arange(self.Nt-1)))
-        linker = imap(self.linkFn, zip(locs, repeat((D, self.zscale))))
+        linker = imap(self.linkFn, izip(locs, repeat((D, self.zscale))))
         for t, MLlinks in enumerate(linker):
-            Nlinks, _ = MLlinks.shape if MLlinks.size > 0 else (0, 0)
+            if MLlinks.ndim == 2:
+                Nlinks, _ = MLlinks.shape if MLlinks.size > 0 else (0, 0)
+            else:
+                Nlinks = 0
             LINKS[t+1]['Nlinks'] = Nlinks
             LINKS[t+1]['links'] = MLlinks
         skiplocs = izip(imap(lambda t: getProbs(t), arange(2, self.Nt)),
@@ -298,7 +301,10 @@ class TrackingData:
                         imap(lambda t: getLocs(t), arange(self.Nt-2)))
         skiplinker = imap(self.linkFn, zip(skiplocs, repeat((D, self.zscale))))
         for t, MLlinks in enumerate(skiplinker):
-            Nlinks, _ = MLlinks.shape if MLlinks.size > 0 else (0, 0)
+            if MLlinks.ndim == 2:
+                Nlinks, _ = MLlinks.shape if MLlinks.size > 0 else (0, 0)
+            else:
+                Nlinks = 0
             LINKS[t+2]['Nskiplinks'] = Nlinks
             LINKS[t+2]['skiplinks'] = MLlinks
         return LINKS

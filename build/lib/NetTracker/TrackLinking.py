@@ -2,7 +2,7 @@ from numpy import *
 import pandas as pd
 from scipy.optimize import minimize_scalar
 from itertools import product, permutations, repeat
-import TrackingData as TD
+from . import TrackingData as TD
 from lap import lapmod
 import sys
 if sys.version_info.major == 3:
