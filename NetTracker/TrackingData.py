@@ -48,9 +48,9 @@ def linkFrame(args):
     c = make_c()
     assert sum(isnan(c)) == 0
     # now = array(hungarian_solve(c))
-    _, now = array(lapjv(c, return_cost=False))
+    now, _ = array(lapjv(c, return_cost=False))
     back = arange(now.size)
-    linkinds = (back<Nb)*(now<Nn)
+    linkinds = (back < Nb)*(now < Nn)
     MLlinks = array([back[linkinds], now[linkinds]]).T
     return MLlinks
 
