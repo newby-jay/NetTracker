@@ -13,7 +13,8 @@ from .TrackLinking import linkTracks
 segmentVid = segmentVidForwardBackward
 
 import pandas as pd
-import tensorflow as tf
+import tensorflow
+import tensorflow.compat.v1 as tf
 from itertools import product
 
 import apache_beam as beam

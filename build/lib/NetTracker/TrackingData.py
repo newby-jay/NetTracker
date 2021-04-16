@@ -50,7 +50,7 @@ def linkFrame(args):
     # now = array(hungarian_solve(c))
     now, _ = array(lapjv(c, return_cost=False))
     back = arange(now.size)
-    linkinds = (back<Nb)*(now<Nn)
+    linkinds = (back < Nb)*(now < Nn)
     MLlinks = array([back[linkinds], now[linkinds]]).T
     return MLlinks
 

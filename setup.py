@@ -100,7 +100,7 @@ REQUIRED_PACKAGES = [
     'pandas',
     'lap',
     #'apache_beam',
-    'tensorflow==1.9.0',
+    'tensorflow==2.3.0',
     # 'numba==0.38.1'
     ]
 

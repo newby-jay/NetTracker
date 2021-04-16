@@ -2,7 +2,8 @@ import numpy as np
 from numpy import array, arange, zeros, ones_like
 from numpy import mean, std, r_, c_, nonzero, float64
 import os
-import tensorflow as tf
+import tensorflow
+import tensorflow.compat.v1 as tf
 import pandas as pd
 from scipy import interpolate
 from numpy.random import rand
