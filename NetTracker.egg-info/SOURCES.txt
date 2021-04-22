@@ -1,7 +1,8 @@
 README.md
 setup.py
 NetTracker/FrameLinking.py
-NetTracker/NNsegmentation.py
+NetTracker/NN_v1.py
+NetTracker/NN_v2.py
 NetTracker/NetTracker.py
 NetTracker/RadiusEstimation.py
 NetTracker/TrackLinking.py

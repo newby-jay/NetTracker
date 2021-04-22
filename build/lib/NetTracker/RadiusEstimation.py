@@ -1,17 +1,9 @@
-##############################
-##############################
-#### UNUSED ##################
-##############################
-##############################
-# from __future__ import division
-# from __future__ import print_function
 from numpy import *
 import pandas as pd
 from scipy.optimize import minimize_scalar
 from itertools import product, permutations, repeat
 # from multiprocessing import Pool
 # from contextlib import closing
-from Hungarian import hungarian_solve
 import sys
 if sys.version_info.major == 3:
     izip = zip
@@ -80,59 +72,59 @@ def estimateRadii(args):
         radii[n], Ibg[n], Ipsf[n], SNR[n] = estimate(xave[:2], frame)
     return radii, Ibg, Ipsf, SNR
 
-class EstimateRadii:
-
-    def __init__(self, localizations):
-        self.particleSet = localizations
-        if len(filename)>0:
-            try:
-                self.Data = pd.read_csv(filename+' (tracks).csv', index_col=0)
-                self.Nt = self.Data.frame.max()
-                self.trajectoryStats(output=True)
-            except:
-                print('particle paths not found')
-            try:
-                self.setDetections(
-                    pd.read_csv(
-                        filename+' (localizations).csv',
-                        index_col=0)
-                    )
-            except:
-                print('particle set not found')
-                raise
-            return None
-        elif len(shape)>0:
-            self.Nt, self.Ny, self.Nx, self.Nz = shape
-            self.shape = shape
-        else:
-            return None
-    def _estimateAllRadii(self, vid, nprocs, ds):
-        """Gaussian fit to local region, limit 15 pixel radius.
-           Minimizes (A + B*exp(-0.5*(d_ij/r)**2) - I_ij)**2.
-           Output is r.
-        """
-        for t in arange(self.Nt):
-            volume = float32(vid.getVolume(t)[::ds, ::ds, :])
-            locs = self.particleSetGrouped[t][:, :3]
-            radii, Ibg, Ipeak, SNR = estimateRadii((locs, volume))
-            self.particleSetGrouped[t][:, 4] = radii
-            self.particleSetGrouped[t][:, 5] = Ibg
-            self.particleSetGrouped[t][:, 6] = Ipeak
-            self.particleSetGrouped[t][:, 7] = SNR
-    def estimateRadii(self, trackingData, vidFile, ds=1):
-        print('estimating PSF radii')
-        self._estimateAllRadii(vidFile, nprocs, ds)
-        r, Ibg, Ipeak, SNR = [], [], [], []
-        for k, v in self.particleSetGrouped.items():
-            r.extend(v[:, 4])
-            Ibg.extend(v[:, 5])
-            Ipeak.extend(v[:, 6])
-            SNR.extend(v[:, 7])
-        trackingData.setDetections(
-            self.particleSet
-                .assign(r=array(r))
-                .assign(Ibg=array(Ibg))
-                .assign(Ipeak=array(Ipeak))
-                .assign(SNR=array(SNR))
-            )
-        return self
+# class EstimateRadii:
+#
+#     def __init__(self, localizations):
+#         self.particleSet = localizations
+#         if len(filename)>0:
+#             try:
+#                 self.Data = pd.read_csv(filename+' (tracks).csv', index_col=0)
+#                 self.Nt = self.Data.frame.max()
+#                 self.trajectoryStats(output=True)
+#             except:
+#                 print('particle paths not found')
+#             try:
+#                 self.setDetections(
+#                     pd.read_csv(
+#                         filename+' (localizations).csv',
+#                         index_col=0)
+#                     )
+#             except:
+#                 print('particle set not found')
+#                 raise
+#             return None
+#         elif len(shape)>0:
+#             self.Nt, self.Ny, self.Nx, self.Nz = shape
+#             self.shape = shape
+#         else:
+#             return None
+#     def _estimateAllRadii(self, vid, nprocs, ds):
+#         """Gaussian fit to local region, limit 15 pixel radius.
+#            Minimizes (A + B*exp(-0.5*(d_ij/r)**2) - I_ij)**2.
+#            Output is r.
+#         """
+#         for t in arange(self.Nt):
+#             volume = float32(vid.getVolume(t)[::ds, ::ds, :])
+#             locs = self.particleSetGrouped[t][:, :3]
+#             radii, Ibg, Ipeak, SNR = estimateRadii((locs, volume))
+#             self.particleSetGrouped[t][:, 4] = radii
+#             self.particleSetGrouped[t][:, 5] = Ibg
+#             self.particleSetGrouped[t][:, 6] = Ipeak
+#             self.particleSetGrouped[t][:, 7] = SNR
+#     def estimateRadii(self, trackingData, vidFile, ds=1):
+#         print('estimating PSF radii')
+#         self._estimateAllRadii(vidFile, nprocs, ds)
+#         r, Ibg, Ipeak, SNR = [], [], [], []
+#         for k, v in self.particleSetGrouped.items():
+#             r.extend(v[:, 4])
+#             Ibg.extend(v[:, 5])
+#             Ipeak.extend(v[:, 6])
+#             SNR.extend(v[:, 7])
+#         trackingData.setDetections(
+#             self.particleSet
+#                 .assign(r=array(r))
+#                 .assign(Ibg=array(Ibg))
+#                 .assign(Ipeak=array(Ipeak))
+#                 .assign(SNR=array(SNR))
+#             )
+#         return self

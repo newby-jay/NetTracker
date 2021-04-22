@@ -1,5 +1,5 @@
 from numpy import *
-import NetTracker as NT
+import NetTrackerEXP as NT
 import pims
 modelPath = '~/Dropbox/PT/NetTracker/netTrackerRNN/models/3L-RNN-3D-set1-EMA'
 vidPath = '~/Dropbox/PT/BeamTest/testVids/'
