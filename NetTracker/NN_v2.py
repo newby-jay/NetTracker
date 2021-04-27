@@ -1,6 +1,7 @@
 from numpy import *
 import os
-import tensorflow as tf
+import tensorflow
+import tensorflow.compat.v1 as tf
 import pandas as pd
 from scipy import interpolate
 from numpy.random import rand
@@ -63,7 +64,7 @@ def segmentVid_V2(vid, stats, modelFileName):
             #Px, Pxy = extractLikelihood(predictions)
             OL = _ObsL(
                 Px.reshape(Ny, Nx),
-                Pxy.reshape(Ny, Nx, 5, 5))
+                Pxy.reshape(Ny, Nx, 9, 9))
             locs = OL.collectLocalizations()
             toAppend = []
             for x in locs:
@@ -120,7 +121,7 @@ class _ObsL:
         assert y.size == 2
         y1, y2 = int64(around(y))
         patch0 = self.Pxy[y2, y1]
-        patch = self.BLpatch(patch0)
+        patch = patch0#self.BLpatch(patch0)
         return patch
     def update(self, Y):
         self.Y.extend(Y)
