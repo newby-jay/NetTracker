@@ -15,18 +15,15 @@ import tensorflow as tf
 import tensorflow.compat.v1 as tf
 from itertools import product
 
-import apache_beam as beam
-from apache_beam.transforms import PTransform
-from apache_beam.io import filebasedsource, ReadFromText, WriteToText, iobase
-from apache_beam.io.iobase import Read
 
-class NeuralNet(beam.DoFn):
+class NeuralNet:
     """Process a video with the Neural Net tracker. Input 'backwardRun=False',
     if set to True will use the forward/backward algorithm for better accuracy,
     at the expense of slower processing time."""
 
     def __init__(self, backwardRun=False):
         self.backwardRun = backwardRun
+
     def process(self, KVelement, modelPath):
         key, element = KVelement
         stats = mean(element['stats'], axis=1)
@@ -45,7 +42,8 @@ class NeuralNet(beam.DoFn):
             pnew = float64(array(Pz['p'])).ravel()
             p = concatenate([p, pnew], 0)
 
-        pixelProb = pd.DataFrame(xyzt, columns=['x', 'y', 'z', 't']).assign(p=p)
+        pixelProb = pd.DataFrame(
+            xyzt, columns=['x', 'y', 'z', 't']).assign(p=p)
         pointSet = LocateParticlesConnectedComponents(vid.shape, pixelProb)
         output = {'metadata': element['metadata'],
                   'pointSet': pointSet,
@@ -56,13 +54,15 @@ class NeuralNet(beam.DoFn):
         outputLabel += '-{0}-{1}-{2}'.format(nt, ny, nx)
         yield (outputLabel, output)
 
-class NeuralNet_V2(beam.DoFn):
+
+class NeuralNet_V2:
     """Process a video with the Neural Net tracker. Uses version 2 neural
     network, which estimates 2-point conditional probabilities. Only works
     for 2D images."""
 
     def __init__(self):
         pass
+
     def process(self, KVelement, modelPath):
         key, element = KVelement
         stats = mean(element['stats'], axis=1)
@@ -91,11 +91,13 @@ class NeuralNet_V2(beam.DoFn):
         outputLabel += '-{0}-{1}-{2}'.format(nt, ny, nx)
         yield (outputLabel, output)
 
-class Segment(beam.DoFn):
+
+class Segment:
     """Compute radius, intensity value, and SNR."""
 
     def __init__(self):
         pass
+
     def _getRadii(self, vid, trackData):
         """Estimate radius to local region, limit 15 pixel radius."""
         Nt, Nx, Ny, Nz = trackData.shape
@@ -116,12 +118,13 @@ class Segment(beam.DoFn):
             SNR.extend(v[:, 7])
         trackData.setDetections(
             trackData.particleSet
-                .assign(r=array(r))
-                .assign(Ibg=array(Ibg))
-                .assign(Ipeak=array(Ipeak))
-                .assign(SNR=array(SNR))
+            .assign(r=array(r))
+            .assign(Ibg=array(Ibg))
+            .assign(Ipeak=array(Ipeak))
+            .assign(SNR=array(SNR))
             )
         return trackData
+
     def process(self, KVelement):
         key, element = KVelement
         Nt, Ny, Nx, Nz = element['videoData'].shape
@@ -130,10 +133,11 @@ class Segment(beam.DoFn):
         trackData = self._getRadii(element['videoData'], trackData)
         output = {'pointSet': trackData.particleSet,
                   'metadata': element['metadata']
-                 }
+                  }
         yield (key, output)
 
-class Linker(beam.DoFn):
+
+class Linker:
     """Link particle localization into tracks. Input `sigma=5` determines how
     far a link can be made (increasing this value will mean particles can make
     larger displacements between frames). Input `filterLength=1` (defaults to
@@ -142,8 +146,10 @@ class Linker(beam.DoFn):
     missing observations (this will make tracks longer)."""
 
     def __init__(self, sigma=5., filterLength=5, trackLink=False):
-        self.sigma = sigma; self.filterLength = filterLength;
+        self.sigma = sigma
+        self.filterLength = filterLength
         self.trackLink = trackLink
+
     def process(self, KVelement):
         key, element = KVelement
         zscale = element['metadata']['dz']/element['metadata']['dxy']
@@ -165,7 +171,7 @@ class Linker(beam.DoFn):
                 tLinkScale=3,
                 birth=2.,
                 death=2.)
-        if self.filterLength>2:
+        if self.filterLength > 2:
             trackData.filterPathsByLength(self.filterLength)
         if self.trackLink:
             trackData = linkTracks(
@@ -177,15 +183,17 @@ class Linker(beam.DoFn):
                   'particleSet': detectionsOut,
                   'tracks': trackData.tracksToDict(),
                   'metadata': element['metadata'],
-                 }
+                  }
         yield (key, output)
 
-class TracksToCSV(beam.DoFn):
+
+class TracksToCSV:
     """Write tracks to CSV."""
 
     def __init__(self):
         self.columns = ['x', 'y', 'z', 't', 'r', 'Ibg', 'Ipeak', 'SNR',
                         'Deff (xy)', 'Deff (xyz)', 'particle']
+
     def _getPath(self, path):
         spath = []
         while len(path) > 0:
@@ -197,6 +205,7 @@ class TracksToCSV(beam.DoFn):
         spath.reverse()
         assert spath[0] == 'gs:'
         return '/'.join(spath[3:])
+
     def process(self, KVelement):
         key, element = KVelement
         fileName = self._getPath(key)

@@ -64,6 +64,7 @@ class build(_build):  # pylint: disable=invalid-name
 # worker-startup log.
 CUSTOM_COMMANDS = []
 
+
 class CustomCommands(setuptools.Command):
   """A setuptools Command class able to run arbitrary commands."""
 
@@ -99,9 +100,7 @@ REQUIRED_PACKAGES = [
     'scipy',
     'pandas',
     'lap',
-    #'apache_beam',
     'tensorflow',
-    # 'numba==0.38.1'
     ]
 
 setuptools.setup(

@@ -15,12 +15,14 @@ if sys.version_info.major == 3:
 else:
     from itertools import izip, imap
 
+
 def segmentVid_V1(vid, stats, modelFileName, backwardRun=False):
     """Process video through a neural network to extract particle centers.
     Uses version 2 neural network. Works for 3D videos."""
     Nt, Ny, Nx = vid.shape
     P = zeros((Nt, Ny, Nx), dtype='float32')
     # P = zeros((5, 0))
+
     def getImage(k):
         vmean, vstd = stats[k]
         img = vid[k].astype('float32')
@@ -40,16 +42,17 @@ def segmentVid_V1(vid, stats, modelFileName, backwardRun=False):
         toNextFrame = tf.get_collection('eval_op')[3]
         Pop0 = tf.get_collection('eval_op')[4]
         toNextFrame0 = tf.get_collection('eval_op')[5]
+        toNextFrameEval = 0
         state0 = zeros((1, int(Ny/2), int(Nx/2), 6), dtype='float32')
         fd = {images_placeholder: getImage(0),
               state_placeholder: state0}
-        P0, toNextFrame0Eval = sess.run([Pop0, toNextFrame0], feed_dict = fd)
+        P0, toNextFrame0Eval = sess.run([Pop0, toNextFrame0], feed_dict=fd)
         #### Forward run
         for t in arange(Nt):
-            state = toNextFrameEval if t>0 else toNextFrame0Eval
+            state = toNextFrameEval if t > 0 else toNextFrame0Eval
             fd = {images_placeholder: getImage(t),
                   state_placeholder: state}
-            Pt, toNextFrameEval = sess.run([Pop, toNextFrame], feed_dict = fd)
+            Pt, toNextFrameEval = sess.run([Pop, toNextFrame], feed_dict=fd)
             P[t] = Pt.reshape(Ny, Nx)
         #### Backward run
         if backwardRun:
@@ -58,7 +61,7 @@ def segmentVid_V1(vid, stats, modelFileName, backwardRun=False):
                       state_placeholder: toNextFrameEval}
                 Pt, toNextFrameEval = sess.run(
                     [Pop, toNextFrame],
-                    feed_dict = fd)
+                    feed_dict=fd)
                 Pt = Pt.reshape(Ny, Nx)
                 Q = 1. - P[t]
                 P[t] *= Pt
@@ -71,6 +74,7 @@ def segmentVid_V1(vid, stats, modelFileName, backwardRun=False):
     out = out0.assign(p=dprobOut)
     return out
 
+
 def LocateParticlesConnectedComponents(shape, pixelProb, thresh=0.5):
     """Given the localization probabilities, compute the set
        of most likely particle locations for each frame."""
@@ -79,6 +83,7 @@ def LocateParticlesConnectedComponents(shape, pixelProb, thresh=0.5):
     x, y, z, p, times = [], [], [], [], []
     ###########################
     gt = pixelProb.groupby('t')
+
     def getVolume(t):
         try:
             Pt = gt.get_group(t)
@@ -101,13 +106,14 @@ def LocateParticlesConnectedComponents(shape, pixelProb, thresh=0.5):
     print(len(p), 'particle localizations found')
     DF = pd.DataFrame(
         array([times, x, y, z, p,
-            np.zeros_like(p),
-            np.zeros_like(p),
-            np.zeros_like(p),
-            np.zeros_like(p)]).T,
+               np.zeros_like(p),
+               np.zeros_like(p),
+               np.zeros_like(p),
+               np.zeros_like(p)]).T,
         columns=['t', 'x', 'y', 'z', 'p', 'r', 'Ibg', 'Ipeak', 'SNR']
         )
     return DF
+
 
 def _connectedComponents(args):
     ## input is a 4xN array (x, y, z, p)
@@ -119,12 +125,12 @@ def _connectedComponents(args):
     #             (-1, 0, -1), (1, 0, -1), (0, -1, -1), (0, 1, -1)])
     nn = array([(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0),
                 (0, 0, -1), (0, 0, 1)])
-    locToPlabel = (data[0]*Ny + data[1])*Nz +  data[2]
+    locToPlabel = (data[0]*Ny + data[1])*Nz + data[2]
     pointLabels = np.argsort(locToPlabel)
     locToPlabel = np.sort(locToPlabel)
-    segments = zeros(N)#, dtype='int16')
-    NsegedStart = 0;
-    isOpened = zeros(N)#, dtype='uint8')
+    segments = zeros(N)  # , dtype='int16')
+    NsegedStart = 0
+    isOpened = zeros(N)  # , dtype='uint8')
     currentSegNumber = 1
     openPoints = [0]
     openPoints.pop()
