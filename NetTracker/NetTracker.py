@@ -9,7 +9,6 @@ from .RadiusEstimation import estimateRadii
 from .FrameLinking import linkParticles
 from .TrackLinking import linkTracks
 from .NN_v1 import segmentVid_V1, LocateParticlesConnectedComponents
-from .NN_v2 import segmentVid_V2
 import pandas as pd
 import tensorflow as tf
 import tensorflow.compat.v1 as tf
@@ -53,44 +52,6 @@ class NeuralNet:
         nt, ny, nx, nz = element['metadata']['chunkIndex']
         outputLabel += '-{0}-{1}-{2}'.format(nt, ny, nx)
         yield (outputLabel, output)
-
-
-class NeuralNet_V2:
-    """Process a video with the Neural Net tracker. Uses version 2 neural
-    network, which estimates 2-point conditional probabilities. Only works
-    for 2D images."""
-
-    def __init__(self):
-        pass
-
-    def process(self, KVelement, modelPath):
-        key, element = KVelement
-        stats = mean(element['stats'], axis=1)
-        stats[:, 1] = sqrt(stats[:, 1] - stats[:, 0]**2)
-        vid = element['videoData']
-        Nz = vid.shape[3]
-        assert Nz == 1, "This method only works on 2D videos"
-        xyztp = zeros((0, 5), 'int32')
-        for z in arange(Nz):
-            localizations = segmentVid_V2(
-                vid[..., z],
-                stats,
-                modelPath
-                )
-            xyztp = concatenate([xyztp, localizations], 0)
-        pointSet = pd.DataFrame(
-            xyztp,
-            columns=['x', 'y', 'z', 't', 'p']
-            ).assign(r=0., Ibg=0., Ipeak=0., SNR=0.)
-        output = {'metadata': element['metadata'],
-                  'pointSet': pointSet,
-                  'stats': stats,
-                  'videoData': element['videoData']}
-        outputLabel = element['metadata']['fileName']
-        nt, ny, nx, nz = element['metadata']['chunkIndex']
-        outputLabel += '-{0}-{1}-{2}'.format(nt, ny, nx)
-        yield (outputLabel, output)
-
 
 class Segment:
     """Compute radius, intensity value, and SNR."""
